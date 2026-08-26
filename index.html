@@ -1258,6 +1258,7 @@ function renderViewer(recipient, sender, message, photos){
   }
 
   if(d){
+  
     try{
       const payload = JSON.parse(decodeURIComponent(escape(atob(d))));
       document.documentElement.classList.remove('viewer-boot');

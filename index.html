@@ -250,6 +250,19 @@
 
   html.viewer-boot #step-intake{display:none !important}
   html.viewer-boot #step-bootload{display:flex !important}
+
+  /* ---- sender direction toggle ---- */
+  .dir-toggle{display:flex;gap:10px;margin-bottom:14px}
+  .dir-btn{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 10px;
+    border:2.5px solid var(--ink);border-radius:14px;background:var(--paper-2);cursor:pointer;
+    box-shadow:2px 2px 0 var(--ink);transition:all .12s ease;font-family:'Work Sans',sans-serif;
+  }
+  .dir-btn:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .dir-btn.selected{background:var(--yellow);transform:translate(1px,1px);box-shadow:2px 2px 0 var(--ink)}
+  .dir-btn .dir-emoji{font-size:1.4rem}
+  .dir-btn .dir-label{font-weight:700;font-size:.82rem;color:var(--ink)}
+  .dir-btn .dir-sub{font-size:.66rem;color:var(--ink-soft);font-weight:500}
 </style>
 </head>
 <body>
@@ -279,6 +292,21 @@
       <p style="text-align:center;color:var(--ink-soft);font-size:12.5px;margin-bottom:22px">Three photos, a few words — that's all it takes.</p>
 
       <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div style="font-size:11px;color:var(--ink-soft);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px">Who's sending this</div>
+          <div class="dir-toggle" id="dirToggle">
+            <button type="button" class="dir-btn selected" data-dir="sister" onclick="pickDirection('sister')">
+              <span class="dir-emoji">🎀</span>
+              <span class="dir-label">I'm the Sister</span>
+              <span class="dir-sub">sending to my brother</span>
+            </button>
+            <button type="button" class="dir-btn" data-dir="brother" onclick="pickDirection('brother')">
+              <span class="dir-emoji">🧵</span>
+              <span class="dir-label">I'm the Brother</span>
+              <span class="dir-sub">sending to my sister</span>
+            </button>
+          </div>
+        </div>
         <input id="in-recipient" class="inp" placeholder="Their name" />
         <input id="in-sender" class="inp" placeholder="Your name" />
 
@@ -603,17 +631,24 @@ const BASE_PRICE = 79;
 const COUPONS = { 'RAKHI': 0, 'RAKHI1': 1, 'SIBLOVE': 59 };
 const PHOTO_COUNT = 3;
 // ⚠️ this is a NEW combined flow — create a fresh table (same columns as the
-// old 'rakhi' table: recipient, sender, message, photo1, photo2, photo3,
-// price, coupon, payment_id, paid) named exactly this, or point it at 'rakhi'
-// if you want to reuse the old one.
+// old 'rakhi' table plus one new text column: recipient, sender, message,
+// direction, photo1, photo2, photo3, price, coupon, payment_id, paid) named
+// exactly this, or point it at 'rakhi' after adding the 'direction' column.
 const TABLE_NAME = 'rakhi_combo';
 
 /* ---------- state ---------- */
-let state = { recipient:'', sender:'', message:'', photos:[null,null,null], photoFiles:[null,null,null] };
+let state = { recipient:'', sender:'', message:'', direction:'sister', photos:[null,null,null], photoFiles:[null,null,null] };
 let activeSlot = null;
 let currentPrice = BASE_PRICE;
 let appliedCoupon = null;
 let isViewerMode = false;
+let direction = 'sister'; // 'sister' = sister sending to brother, 'brother' = brother sending to sister
+
+/* ---------- direction toggle ---------- */
+function pickDirection(dir){
+  direction = dir;
+  document.querySelectorAll('.dir-btn').forEach(b => b.classList.toggle('selected', b.dataset.dir === dir));
+}
 
 /* ---------- decorative corner diyas + scattered thread icons ---------- */
 function diyaSVG(){
@@ -668,7 +703,8 @@ async function generateRakhiMsg(){
   await new Promise(r=> setTimeout(r, 900));
 
   const recipientName = document.getElementById('in-recipient').value.trim() || 'you';
-  const msg = (RAKHI_FALLBACKS[rakhiTone] || RAKHI_FALLBACKS.wholesome).replace(/\{N\}/g, recipientName);
+  let msg = (RAKHI_FALLBACKS[rakhiTone] || RAKHI_FALLBACKS.wholesome).replace(/\{N\}/g, recipientName);
+  if(direction === 'brother') msg = msg.replace(/mithai/gi, 'the good snacks');
 
   const ta = document.getElementById('in-message');
   ta.value = msg;
@@ -742,7 +778,7 @@ function startPreview(){
     return;
   }
   document.getElementById('intake-err').style.display='none';
-  state.recipient = recipient; state.sender = sender; state.message = message;
+  state.recipient = recipient; state.sender = sender; state.message = message; state.direction = direction;
 
   document.getElementById('notif-sender-name').textContent = sender;
   document.getElementById('env-title').textContent = `Happy Raksha Bandhan`;
@@ -851,7 +887,7 @@ async function handlePayment(){
   if(currentPrice === 0){
     const order = {
       paymentId: 'free_' + crypto.randomUUID(),
-      recipient: state.recipient, sender: state.sender, message: state.message,
+      recipient: state.recipient, sender: state.sender, message: state.message, direction: state.direction,
       photos: state.photoFiles, price: currentPrice, coupon: appliedCoupon, ts: Date.now()
     };
     saveOrderLocal(order);
@@ -879,7 +915,7 @@ async function handlePayment(){
     handler: function(response){
       const order = {
         paymentId: response.razorpay_payment_id,
-        recipient: state.recipient, sender: state.sender, message: state.message,
+        recipient: state.recipient, sender: state.sender, message: state.message, direction: state.direction,
         photos: state.photoFiles, price: currentPrice, coupon: appliedCoupon, ts: Date.now()
       };
       saveOrderLocal(order);
@@ -943,6 +979,7 @@ async function finalizeSurprise(order){
           recipient: order.recipient,
           sender: order.sender,
           message: order.message,
+          direction: order.direction,
           photo1: urls[0],
           photo2: urls[1],
           photo3: urls[2],
@@ -967,6 +1004,7 @@ async function finalizeSurprise(order){
     document.getElementById('letter-sender').textContent = order.sender;
     document.getElementById('agree-recipient-name').textContent = order.recipient || 'they';
     state.message = order.message;
+    state.direction = order.direction;
     state.photos = urls;
     populateBoard(state.photos);
 
@@ -1284,8 +1322,17 @@ function preloadGifs(){
   GIFS.forEach(url => { const img = new Image(); img.src = url; });
 }
 
-function getBalloonMsgs(name){
+function getBalloonMsgs(name, dir){
   const n = name || 'you';
+  if(dir === 'brother'){
+    // brother sending to sister
+    return [
+      `So glad you're my sister, ${n} 🤍`,
+      `You mother-hen me and I secretly love it.`,
+      `I've got your back. Always will. 🧵`
+    ];
+  }
+  // sister sending to brother
   return [
     `So glad you're my person, ${n} 🤍`,
     `Every fight, every fix — worth it.`,
@@ -1346,7 +1393,7 @@ function updateBalloonCounter(){
 }
 
 function buildBalloons(){
-  balloonMsgs = getBalloonMsgs(state.recipient);
+  balloonMsgs = getBalloonMsgs(state.recipient, state.direction);
   allPoppedFlag = false;
   const field = document.getElementById('bfield');
   field.innerHTML = '';
@@ -1444,12 +1491,13 @@ function goBackTo(id){
 }
 
 /* ---------- viewer mode: ?id=<row uuid> (new, short) or ?d=<base64 payload> (legacy) ---------- */
-function renderViewer(recipient, sender, message, photos){
+function renderViewer(recipient, sender, message, photos, dir){
   isViewerMode = true;
   state.recipient = recipient;
   state.sender = sender;
   state.message = message;
   state.photos = photos;
+  state.direction = dir || 'sister';
 
   document.getElementById('notif-sender-name').textContent = sender;
   document.getElementById('env-title').textContent = `Happy Raksha Bandhan`;
@@ -1485,7 +1533,7 @@ function renderViewer(recipient, sender, message, photos){
       );
       if(error || !data) throw error || new Error('not found');
       document.documentElement.classList.remove('viewer-boot');
-      renderViewer(data.recipient, data.sender, data.message, [data.photo1, data.photo2, data.photo3]);
+      renderViewer(data.recipient, data.sender, data.message, [data.photo1, data.photo2, data.photo3], data.direction);
     }catch(err){
       console.error('Could not load surprise', err);
       bootError("Hmm, this link isn't loading. Check your connection and try again.");
@@ -1497,7 +1545,7 @@ function renderViewer(recipient, sender, message, photos){
     try{
       const payload = JSON.parse(decodeURIComponent(escape(atob(d))));
       document.documentElement.classList.remove('viewer-boot');
-      renderViewer(payload.r, payload.s, payload.m, payload.p);
+      renderViewer(payload.r, payload.s, payload.m, payload.p, payload.dir);
     }catch(err){
       console.error('Bad link payload', err);
       bootError("This link looks broken. Ask for a new one.");

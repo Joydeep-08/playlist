@@ -153,12 +153,17 @@ input:focus,textarea:focus{outline:none;border-color:var(--ter)}
 .cf{position:fixed;top:-12px;z-index:60;width:9px;height:14px;pointer-events:none;animation:cfall 2.4s ease-in forwards}
 @keyframes cfall{to{transform:translate(var(--dx),105vh) rotate(720deg)}}
 .hey::after{content:"🎈";position:absolute;right:-8px;top:-34px;font-size:.45em;animation:bob 2.6s ease-in-out infinite}
+#mini{position:fixed;right:14px;bottom:14px;z-index:25;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);padding:6px 6px 6px 14px;border-radius:999px;box-shadow:0 8px 22px rgba(200,60,90,.28);font-size:13px;font-weight:600;color:var(--ter-d);max-width:70vw}
+#mini #miniT{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw}
+#mini #miniB{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#ff4d8d,#ffb020);color:#fff;font-size:13px}
+#mini.playing .mdisc{display:inline-block;animation:spin 3s linear infinite}
 </style>
 </head>
 <body>
 <div id="petals"></div>
 <div class="dot" style="left:3%;top:22%;width:26px;height:26px;background:#ffc2de"></div>
 <div class="dot" style="right:3%;top:26%;width:40px;height:40px;background:#d4c2ff"></div>
+<div id="mini" class="hidden"><span class="mdisc">🎵</span><span id="miniT"></span><button id="miniB" aria-label="Play or pause">❚❚</button></div>
 <div id="pvbar" class="hidden"><span>Preview</span><button class="btn" id="editBtn">← Edit</button></div>
 
 <main id="pF" class="scr">
@@ -375,12 +380,13 @@ document.querySelectorAll(".petal").forEach((p,i)=>{p.style.background=CFC[i%6];
 (function(){const box=$("petals");for(let i=0;i<9;i++){const b=document.createElement("span");b.className="bal";b.style.left=(4+i*11)+"vw";b.style.background=CFC[i%6];b.style.animationDuration=(14+Math.random()*10)+"s";b.style.animationDelay=(-Math.random()*20)+"s";box.appendChild(b);}})();
 const sid = n => n<0 ? "pF" : "p"+n;
 function show(n, push=true){
-  stopSongs();
+  if(n<0) stopSongs();
   step = n;
   for(let i=-1;i<=6;i++) $(sid(i)).classList.toggle("on", i===n);
   $("pvbar").classList.toggle("hidden", !(mode==="create" && n>=0));
   $("genbox").classList.toggle("hidden", mode!=="create");
   window.scrollTo(0,0);
+  updateMini();
   clearTimeout(loadT);
   if(n===0){ $("env").classList.remove("open"); loadT = setTimeout(()=>{ if(step===0) show(1); }, 2600); }
   if(n===2) $("env").classList.remove("open");
@@ -414,6 +420,7 @@ if(mode==="view") $("returnBtn").classList.remove("hidden");
 
 /* ---------- SONGS (with the couple's photos on each cassette) ---------- */
 const fmt = t => isFinite(t) ? Math.floor(t/60)+":"+String(Math.floor(t%60)).padStart(2,"0") : "0:00";
+let cur = -1;
 const auds = SONGS.map(s => { const a = new Audio(s.f); a.preload = "metadata"; a.loop = false; return a; });
 function buildSongs(ph){
   $("cassettes").innerHTML = SONGS.map((s,i)=>{
@@ -430,8 +437,9 @@ function buildSongs(ph){
     <span class="tm" id="tm${i}">0:00</span><span class="hrt">♥</span>
   </div>`;}).join("");
   auds.forEach((a,i)=>{
-    const sync = () => { $("cs"+i).classList.toggle("playing", !a.paused); $("pl"+i).textContent = a.paused ? "▶" : "❚❚"; };
-    a.onplay = a.onpause = a.onended = sync;
+    const sync = () => { $("cs"+i).classList.toggle("playing", !a.paused); $("pl"+i).textContent = a.paused ? "▶" : "❚❚"; updateMini(); };
+    sync();
+    a.onplay = () => { cur = i; sync(); }; a.onpause = a.onended = sync;
     a.ontimeupdate = () => { $("tm"+i).textContent = fmt(a.currentTime); $("tf"+i).style.width = (a.duration ? a.currentTime/a.duration*100 : 0)+"%"; };
     a.onerror = () => { $("se"+i).textContent = "Add "+SONGS[i].f+" next to index.html"; };
     $("pl"+i).onclick = () => {
@@ -443,7 +451,15 @@ function buildSongs(ph){
     };
   });
 }
-function stopSongs(){ auds.forEach(a=>a.pause()); }
+function stopSongs(){ auds.forEach(a=>{a.pause(); a.currentTime=0;}); updateMini(); }
+function updateMini(){
+  const a = auds[cur], on = !!a && !a.paused;
+  const vis = !!a && (on || (a.currentTime>0 && !a.ended)) && step>=0 && step!==4;
+  $("mini").classList.toggle("hidden", !vis);
+  $("mini").classList.toggle("playing", on);
+  if(a){ $("miniT").textContent = SONGS[cur].t; $("miniB").textContent = a.paused ? "▶" : "❚❚"; }
+}
+$("miniB").onclick = () => { const a = auds[cur]; if(!a) return; a.paused ? a.play().catch(()=>{}) : a.pause(); };
 
 function render(d){
   D = d;
